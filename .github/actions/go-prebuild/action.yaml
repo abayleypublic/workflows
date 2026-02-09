@@ -1,0 +1,70 @@
+name: 'Go Pre-Build'
+description: 'Setup Go environment, download dependencies, and optionally vendor them'
+
+inputs:
+  go_version:
+    description: 'Go version to use'
+    required: false
+    default: 'stable'
+  working_directory:
+    description: 'Working directory containing go.mod'
+    required: false
+    default: '.'
+  enable_caching:
+    description: 'Enable Go module caching'
+    required: false
+    default: 'true'
+  run_vendor:
+    description: 'Run go mod vendor for dependency vendoring'
+    required: false
+    default: 'true'
+  run_verify:
+    description: 'Run go mod verify to check dependencies'
+    required: false
+    default: 'true'
+  run_tidy:
+    description: 'Run go mod tidy before other operations'
+    required: false
+    default: 'false'
+
+outputs:
+  go_version:
+    description: 'The Go version that was installed'
+    value: ${{ steps.setup.outputs.go-version }}
+  cache_hit:
+    description: 'Whether the Go cache was hit'
+    value: ${{ steps.setup.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Go
+      id: setup
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ inputs.go_version }}
+        cache: ${{ inputs.enable_caching }}
+        cache-dependency-path: ${{ inputs.working_directory }}/go.sum
+
+    - name: Go Mod Tidy
+      if: inputs.run_tidy == 'true'
+      working-directory: ${{ inputs.working_directory }}
+      run: go mod tidy
+      shell: bash
+
+    - name: Go Mod Download
+      working-directory: ${{ inputs.working_directory }}
+      run: go mod download
+      shell: bash
+
+    - name: Go Mod Vendor
+      if: inputs.run_vendor == 'true'
+      working-directory: ${{ inputs.working_directory }}
+      run: go mod vendor
+      shell: bash
+
+    - name: Go Mod Verify
+      if: inputs.run_verify == 'true'
+      working-directory: ${{ inputs.working_directory }}
+      run: go mod verify
+      shell: bash

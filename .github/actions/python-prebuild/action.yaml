@@ -1,0 +1,93 @@
+name: 'Python Pre-Build'
+description: 'Setup Python environment and install dependencies'
+
+inputs:
+  python_version:
+    description: 'Python version to use'
+    required: false
+    default: '3.12'
+  working_directory:
+    description: 'Working directory containing requirements files'
+    required: false
+    default: '.'
+  enable_caching:
+    description: 'Enable pip caching'
+    required: false
+    default: 'true'
+  requirements_file:
+    description: 'Path to requirements file (relative to working_directory)'
+    required: false
+    default: 'requirements.txt'
+  install_dependencies:
+    description: 'Install dependencies from requirements file'
+    required: false
+    default: 'true'
+  upgrade_pip:
+    description: 'Upgrade pip before installing dependencies'
+    required: false
+    default: 'true'
+  install_command:
+    description: 'Custom install command (overrides default pip install)'
+    required: false
+    default: ''
+  use_uv:
+    description: 'Use uv for faster dependency installation'
+    required: false
+    default: 'false'
+
+outputs:
+  python_version:
+    description: 'The Python version that was installed'
+    value: ${{ steps.setup.outputs.python-version }}
+  cache_hit:
+    description: 'Whether the pip cache was hit'
+    value: ${{ steps.setup.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python
+      id: setup
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python_version }}
+        cache: ${{ inputs.enable_caching == 'true' && 'pip' || '' }}
+        cache-dependency-path: ${{ inputs.working_directory }}/${{ inputs.requirements_file }}
+
+    - name: Upgrade pip
+      if: inputs.upgrade_pip == 'true' && inputs.use_uv == 'false'
+      run: python -m pip install --upgrade pip
+      shell: bash
+
+    - name: Install uv
+      if: inputs.use_uv == 'true'
+      run: pip install uv
+      shell: bash
+
+    - name: Install Dependencies (pip)
+      if: inputs.install_dependencies == 'true' && inputs.install_command == '' && inputs.use_uv == 'false'
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        if [ -f "${{ inputs.requirements_file }}" ]; then
+          pip install -r ${{ inputs.requirements_file }}
+        else
+          echo "Warning: ${{ inputs.requirements_file }} not found, skipping installation"
+        fi
+      shell: bash
+
+    - name: Install Dependencies (uv)
+      if: inputs.install_dependencies == 'true' && inputs.install_command == '' && inputs.use_uv == 'true'
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        if [ -f "${{ inputs.requirements_file }}" ]; then
+          uv pip install -r ${{ inputs.requirements_file }}
+        else
+          echo "Warning: ${{ inputs.requirements_file }} not found, skipping installation"
+        fi
+      shell: bash
+
+    - name: Install Dependencies (custom)
+      if: inputs.install_dependencies == 'true' && inputs.install_command != ''
+      working-directory: ${{ inputs.working_directory }}
+      run: ${{ inputs.install_command }}
+      shell: bash

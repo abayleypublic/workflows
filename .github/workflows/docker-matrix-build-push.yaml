@@ -1,0 +1,150 @@
+name: 'Reusable: Docker Matrix Build and Push'
+
+on:
+  workflow_call:
+    inputs:
+      # Matrix configuration (JSON string)
+      # Example: '[{"app":"backend","language":"go","context":"backend"},{"app":"frontend","language":"node","context":"frontend"}]'
+      matrix_config:
+        description: 'JSON array of build configurations'
+        required: true
+        type: string
+      
+      # Common settings
+      docker_registry:
+        description: 'Docker registry hostname'
+        required: false
+        type: string
+        default: 'europe-west2-docker.pkg.dev'
+      image_prefix:
+        description: 'Prefix for image names (e.g., registry/project/)'
+        required: true
+        type: string
+      image_tag:
+        description: 'Image tag (if empty, uses github.sha)'
+        required: false
+        type: string
+        default: ''
+      platforms:
+        description: 'Target platforms for build'
+        required: false
+        type: string
+        default: 'linux/amd64,linux/arm64'
+      push:
+        description: 'Push images to registry'
+        required: false
+        type: boolean
+        default: true
+      tag_latest:
+        description: 'Also tag images as latest'
+        required: false
+        type: boolean
+        default: true
+      
+      # GCP authentication
+      workload_identity_provider:
+        description: 'GCP Workload Identity Provider'
+        required: false
+        type: string
+        default: ''
+      service_account:
+        description: 'GCP Service Account email'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(inputs.matrix_config) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set image tag
+        id: set-tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      # Go pre-build
+      - name: Go pre-build for ${{ matrix.config.app }}
+        if: matrix.config.language == 'go'
+        uses: ./.github/actions/go-prebuild
+        with:
+          go_version: ${{ matrix.config.go_version || 'stable' }}
+          working_directory: ${{ matrix.config.context || matrix.config.app }}
+          run_vendor: ${{ matrix.config.go_vendor != false }}
+
+      # Node pre-build
+      - name: Node pre-build for ${{ matrix.config.app }}
+        if: matrix.config.language == 'node'
+        uses: ./.github/actions/node-prebuild
+        with:
+          node_version: ${{ matrix.config.node_version || '20' }}
+          working_directory: ${{ matrix.config.context || matrix.config.app }}
+          package_manager: ${{ matrix.config.package_manager || 'npm' }}
+
+      # Python pre-build
+      - name: Python pre-build for ${{ matrix.config.app }}
+        if: matrix.config.language == 'pyth (only if pushing)
+      - name: Authenticate to GCP and Docker
+        if: inputs.push == true && inputs.workload_identity_provider != ''
+        uses: ./.github/actions/gcp-docker-auth
+        with:
+          workload_identity_provider: ${{ inputs.workload_identity_provider }}
+          service_account: ${{ inputs.service_account }}
+          docker_registry: ${{ inputs.docker_registry }}
+
+      # Build image tags
+      - name: Build tags for ${{ matrix.config.app }}
+        id: build-tags
+        run: |
+          TAGS="${{ inputs.image_prefix }}${{ matrix.config.app }}:${{ steps.set-tag.outputs.tag }}"
+          if [ "${{ inputs.tag_latest }}" = "true" ]; then
+            TAGS="${TAGS}"$'\n'"${{ inputs.image_prefix }}${{ matrix.config.app }}:latest"
+          fi
+          # Add custom tags from matrix config
+          if [ -n "${{ matrix.config.tags || '' }}" ]; then
+            while IFS= read -r tag; do
+              if [ -n "$tag" ]; then
+                TAGS="${TAGS}"$'\n'"${{ inputs.image_prefix }}${{ matrix.config.app }}:${tag}"
+              fi
+            done <<< "${{ matrix.config.tags }}"
+          fi
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        shell: bash
+
+      # Build and push Docker image
+      - name: Build and push ${{ matrix.config.app }}
+        uses: ./.github/actions/docker-build-multiplatform
+        with:
+          context: ${{ matrix.config.context || matrix.config.app }}
+          dockerfile: ${{ matrix.config.dockerfile || format('{0}/Dockerfile', matrix.config.context || matrix.config.app) }}
+          tags: ${{ steps.build-tags.outputs.tags }}
+          platforms: ${{ matrix.config.platforms || inputs.platforms }}
+          push: ${{ inputs.push }}
+          build_args: ${{ matrix.config.build_args || '' }}
+          cache_from: ${{ matrix.config.cache_from || '' }}
+          cache_to: ${{ matrix.config.cache_totrix.config.app }}
+          dockerfile: ${{ matrix.config.dockerfile || format('{0}/Dockerfile', matrix.config.context || matrix.config.app) }}
+          tags: |
+            ${{ inputs.image_prefix }}${{ matrix.config.app }}:${{ steps.set-tag.outputs.tag }}
+            ${{ inputs.image_prefix }}${{ matrix.config.app }}:latest
+          platforms: ${{ matrix.config.platforms || inputs.platforms }}
+          push: ${{ inputs.push }}
+          build_args: ${{ matrix.config.build_args || '' }}
