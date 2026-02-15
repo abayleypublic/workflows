@@ -99,7 +99,13 @@ jobs:
 
       # Python pre-build
       - name: Python pre-build for ${{ matrix.config.app }}
-        if: matrix.config.language == 'pyth (only if pushing)
+        if: matrix.config.language == 'python'
+        uses: ./.github/actions/python-prebuild
+        with:
+          python_version: ${{ matrix.config.python_version || '3.11' }}
+          working_directory: ${{ matrix.config.context || matrix.config.app }}
+
+      # Authenticate to GCP (only if pushing)
       - name: Authenticate to GCP and Docker
         if: inputs.push == true && inputs.workload_identity_provider != ''
         uses: ./.github/actions/gcp-docker-auth
@@ -140,11 +146,4 @@ jobs:
           push: ${{ inputs.push }}
           build_args: ${{ matrix.config.build_args || '' }}
           cache_from: ${{ matrix.config.cache_from || '' }}
-          cache_to: ${{ matrix.config.cache_totrix.config.app }}
-          dockerfile: ${{ matrix.config.dockerfile || format('{0}/Dockerfile', matrix.config.context || matrix.config.app) }}
-          tags: |
-            ${{ inputs.image_prefix }}${{ matrix.config.app }}:${{ steps.set-tag.outputs.tag }}
-            ${{ inputs.image_prefix }}${{ matrix.config.app }}:latest
-          platforms: ${{ matrix.config.platforms || inputs.platforms }}
-          push: ${{ inputs.push }}
-          build_args: ${{ matrix.config.build_args || '' }}
+          cache_to: ${{ matrix.config.cache_to || '' }}
