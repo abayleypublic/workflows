@@ -39,4 +39,3 @@ runs:
         registry: ${{ inputs.docker_registry }}
         username: ${{ inputs.docker_username }}
         password: ${{ steps.auth.outputs.access_token }}
-      shell: bash
