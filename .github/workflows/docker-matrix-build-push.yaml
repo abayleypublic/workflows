@@ -82,7 +82,7 @@ jobs:
       # Go pre-build
       - name: Go pre-build for ${{ matrix.config.app }}
         if: matrix.config.language == 'go'
-        uses: ./.github/actions/go-prebuild
+        uses: abayleypublic/workflows/.github/actions/go-prebuild@main
         with:
           go_version: ${{ matrix.config.go_version || 'stable' }}
           working_directory: ${{ matrix.config.context || matrix.config.app }}
@@ -91,7 +91,7 @@ jobs:
       # Node pre-build
       - name: Node pre-build for ${{ matrix.config.app }}
         if: matrix.config.language == 'node'
-        uses: ./.github/actions/node-prebuild
+        uses: abayleypublic/workflows/.github/actions/node-prebuild@main
         with:
           node_version: ${{ matrix.config.node_version || '20' }}
           working_directory: ${{ matrix.config.context || matrix.config.app }}
@@ -100,7 +100,7 @@ jobs:
       # Python pre-build
       - name: Python pre-build for ${{ matrix.config.app }}
         if: matrix.config.language == 'python'
-        uses: ./.github/actions/python-prebuild
+        uses: abayleypublic/workflows/.github/actions/python-prebuild@main
         with:
           python_version: ${{ matrix.config.python_version || '3.11' }}
           working_directory: ${{ matrix.config.context || matrix.config.app }}
@@ -108,7 +108,7 @@ jobs:
       # Authenticate to GCP (only if pushing)
       - name: Authenticate to GCP and Docker
         if: inputs.push == true && inputs.workload_identity_provider != ''
-        uses: ./.github/actions/gcp-docker-auth
+        uses: abayleypublic/workflows/.github/actions/gcp-docker-auth@main
         with:
           workload_identity_provider: ${{ inputs.workload_identity_provider }}
           service_account: ${{ inputs.service_account }}
@@ -137,7 +137,7 @@ jobs:
 
       # Build and push Docker image
       - name: Build and push ${{ matrix.config.app }}
-        uses: ./.github/actions/docker-build-multiplatform
+        uses: abayleypublic/workflows/.github/actions/docker-build-multiplatform@main
         with:
           context: ${{ matrix.config.context || matrix.config.app }}
           dockerfile: ${{ matrix.config.dockerfile || format('{0}/Dockerfile', matrix.config.context || matrix.config.app) }}
